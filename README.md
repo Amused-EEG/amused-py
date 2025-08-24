@@ -175,7 +175,7 @@ If you use Amused in research:
 ```
 @software{amused2025,
   title = {Amused: A Muse S Direct BLE Implementation},
-  author = {nexon33},
+  author = {Adrian Tadeusz Belmans},
   year = {2025},
   url = {https://github.com/nexon33/amused}
 }
