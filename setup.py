@@ -47,7 +47,6 @@ setup(
             "amused-stream=amused.muse_exact_client:main",
             "amused-sleep=amused.muse_sleep_client:main",
             "amused-parse=amused.muse_integrated_parser:main",
-            "amused-config=amused.cli_config:main",
         ],
     },
     keywords="muse eeg ble neuroscience biometrics ppg fnirs brain-computer-interface bci",

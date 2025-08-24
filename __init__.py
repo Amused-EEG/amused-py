@@ -33,9 +33,14 @@ from .muse_data_parser import MuseDataParser
 from .muse_ppg_heart_rate import PPGHeartRateExtractor, HeartRateResult
 from .muse_fnirs_processor import FNIRSProcessor, FNIRSData
 
-# Device configuration
-from .muse_config import MuseDeviceConfig, MuseDevice
-from .amused_config import AmusedConfig, quick_setup, set_viz_time, show_settings
+# Device discovery
+from .muse_discovery import (
+    MuseDevice,
+    find_muse_devices,
+    select_device,
+    connect_to_address,
+    quick_connect
+)
 
 __all__ = [
     "MuseStreamClient",
@@ -54,12 +59,11 @@ __all__ = [
     "HeartRateResult",
     "FNIRSProcessor",
     "FNIRSData",
-    "MuseDeviceConfig",
     "MuseDevice",
-    "AmusedConfig",
-    "quick_setup",
-    "set_viz_time",
-    "show_settings",
+    "find_muse_devices",
+    "select_device",
+    "connect_to_address",
+    "quick_connect",
 ]
 
 def get_version():
@@ -82,8 +86,7 @@ def about():
     - fNIRS blood oxygenation
     - IMU motion tracking
     - Sleep monitoring (8+ hours)
-    - Device discovery & configuration
-    - Configurable visualization buffers
+    - Device discovery & selection
     
     No proprietary SDK required!
     

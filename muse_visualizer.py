@@ -550,28 +550,18 @@ class PlotlyDashVisualizer:
 class MuseVisualizer:
     """Main visualizer class with backend selection"""
     
-    def __init__(self, backend: str = 'auto', use_config: bool = True, **kwargs):
+    def __init__(self, backend: str = 'auto', **kwargs):
         """
         Initialize visualizer with specified backend
         
         Args:
             backend: 'pyqtgraph', 'plotly', 'matplotlib', or 'auto'
-            use_config: Use buffer sizes from configuration
-            **kwargs: Backend-specific arguments (override config if provided)
+            **kwargs: Backend-specific arguments
+                window_size: Buffer size in samples (default: 2560 for 10s at 256Hz)
+                update_rate: Update rate in Hz (default: 30)
         """
         self.backend = backend
         self.visualizer = None
-        
-        # Load configuration if requested
-        if use_config:
-            try:
-                from muse_config import MuseDeviceConfig
-                config = MuseDeviceConfig()
-                # Apply config buffer sizes if not overridden
-                if 'window_size' not in kwargs:
-                    kwargs['window_size'] = config.get_buffer_size('eeg_window')
-            except ImportError:
-                pass  # Config not available, use defaults
         
         if backend == 'auto':
             if PYQTGRAPH_AVAILABLE:

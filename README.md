@@ -44,10 +44,13 @@ import amused
 import asyncio
 
 async def stream():
-    # For full sensor suite (EEG + PPG + IMU + fNIRS)
-    client = amused.MuseSleepClient()  
-    device = await client.find_device()
-    if device:
+    # Find and connect to a Muse device
+    devices = await amused.find_muse_devices()
+    if devices:
+        device = devices[0]  # Use first device found
+        
+        # Stream with full sensor suite
+        client = amused.MuseSleepClient()  
         await client.connect_and_monitor(device.address)
 
 asyncio.run(stream())

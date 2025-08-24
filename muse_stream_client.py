@@ -135,31 +135,15 @@ class MuseStreamClient:
             timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
             print(f"[{timestamp}] {message}")
     
-    async def find_device(self, name_filter: str = "MuseS", use_config: bool = True) -> Optional[Any]:
+    async def find_device(self, name_filter: str = "Muse") -> Optional[Any]:
         """Find Muse device
         
         Args:
             name_filter: Name filter for device search
-            use_config: Use configuration system for device discovery
         
         Returns:
             Device object or None
         """
-        # Try config system first
-        if use_config:
-            try:
-                from muse_config import MuseDeviceConfig
-                config = MuseDeviceConfig()
-                muse_device = await config.find_device()
-                if muse_device:
-                    # Convert to BleakScanner device format
-                    from collections import namedtuple
-                    Device = namedtuple('Device', ['name', 'address'])
-                    return Device(muse_device.name, muse_device.address)
-            except ImportError:
-                pass  # Fall back to regular scan
-        
-        # Regular device scan
         self.log("Scanning for Muse devices...")
         devices = await BleakScanner.discover(timeout=5.0)
         
