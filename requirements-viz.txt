@@ -1,0 +1,30 @@
+# Visualization dependencies for Amused
+# Install with: pip install -r requirements-viz.txt
+
+# Option 1: PyQtGraph (Fastest, best for real-time)
+# Provides high-performance real-time plotting
+pyqtgraph>=0.13.0
+PyQt5>=5.15.0
+# OR PyQt6>=6.4.0  # Alternative to PyQt5
+
+# Option 2: Plotly/Dash (Web-based, interactive)
+# Provides browser-based interactive visualizations
+plotly>=5.17.0
+dash>=2.14.0
+dash-bootstrap-components>=1.5.0
+
+# Option 3: Matplotlib (Simple, widely compatible)
+# Basic plotting, good for static visualizations
+matplotlib>=3.7.0
+
+# Additional dependencies for signal processing
+scipy>=1.10.0  # For FFT and filtering
+
+# Performance optimization
+numba>=0.57.0  # Optional: For JIT compilation of heavy computations
+
+# Note: You don't need to install all options
+# Choose based on your needs:
+# - For desktop app: pyqtgraph + PyQt5
+# - For web app: plotly + dash
+# - For simple plots: matplotlib

@@ -20,6 +20,8 @@ We actually got access to InteraXon's official SDK - but discovered it **doesn't
 - **fNIRS Blood Oxygenation**: Cerebral hemodynamics (HbO2, HbR, TSI)
 - **IMU Motion**: 9-axis accelerometer + gyroscope
 - **Sleep Monitoring**: 8+ hour sessions with automatic data logging
+- **Real-time Visualization**: Interactive plots with PyQtGraph or web-based Plotly/Dash
+- **Binary Recording**: 10x more efficient than CSV with replay capability
 - **No SDK Required**: Pure Python with BLE - no proprietary libraries!
 
 ## Installation
@@ -157,13 +159,63 @@ The Muse S multiplexes all sensor data in a single BLE stream. Key differences:
 - Use `MuseSleepClient`, not `MuseClient`
 - Parse with `MuseIntegratedParser`
 
+## Real-time Visualization
+
+Amused includes powerful visualization capabilities with multiple backends:
+
+### PyQtGraph (Desktop - Fastest)
+```python
+from amused import MuseStreamClient
+from muse_visualizer import MuseVisualizer
+
+# Create visualizer
+viz = MuseVisualizer(backend='pyqtgraph')
+
+# Stream with visualization
+client = MuseStreamClient()
+client.on_eeg(viz.update_eeg)
+client.on_ppg(viz.update_ppg)
+client.on_heart_rate(viz.update_heart_rate)
+client.on_imu(viz.update_imu)
+
+# Start streaming and visualization
+# See examples/06_realtime_visualization.py
+```
+
+### Plotly/Dash (Web-based)
+```python
+# Web-based visualization at http://localhost:8050
+viz = MuseVisualizer(backend='plotly', port=8050)
+viz.run()  # Opens in browser
+```
+
+### Installation
+```bash
+# For PyQtGraph (fastest, desktop)
+pip install pyqtgraph PyQt5
+
+# For Plotly/Dash (web-based)
+pip install plotly dash
+
+# Or install all visualization dependencies
+pip install -r requirements-viz.txt
+```
+
+### Features
+- Live EEG waveforms (4 channels)
+- PPG heart rate monitoring with trend
+- IMU motion tracking (accel + gyro)
+- Frequency spectrum analysis with band indicators
+- Smooth 30+ FPS updates
+- Recording replay with visualization
+
 ## Contributing
 
 This is the first open implementation! Areas to explore:
-- Real-time visualization
 - Additional presets
 - Machine learning pipelines
 - Mobile apps
+- Advanced signal processing
 
 ## License
 
