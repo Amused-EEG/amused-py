@@ -19,6 +19,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from muse_stream_client import MuseStreamClient
 from muse_visualizer import MuseVisualizer, PYQTGRAPH_AVAILABLE, PLOTLY_AVAILABLE
+from muse_discovery_gui import scan_in_thread  # GUI-safe scanning
 
 # Global visualizer instance
 viz = None
@@ -57,7 +58,7 @@ def process_imu(data):
     if viz:
         viz.update_imu(data)
 
-async def stream_with_visualization(duration: int = 60, backend: str = 'auto'):
+async def stream_with_visualization(duration: int = 60, backend: str = 'auto', device_address: str = None):
     """
     Stream Muse data with real-time visualization
     
@@ -83,7 +84,35 @@ async def stream_with_visualization(duration: int = 60, backend: str = 'auto'):
         print("  pip install plotly dash")
         return
     
-    # Create visualizer
+    # If we need to find a device and we're using PyQtGraph, do it BEFORE creating visualizer
+    if not device_address and backend in ['pyqtgraph', 'auto']:
+        print("\nSearching for Muse device (before Qt initialization)...")
+        # Use thread-safe scanning
+        devices = scan_in_thread(timeout=5.0)
+        if not devices:
+            print("No Muse device found!")
+            print("\nMake sure your Muse S is:")
+            print("1. Powered on")
+            print("2. In pairing mode")
+            print("3. Not connected to another device")
+            return
+        
+        # Select device
+        if len(devices) == 1:
+            device_address = devices[0].address
+            print(f"Found: {devices[0].name} ({device_address})")
+        else:
+            print(f"\nFound {len(devices)} devices:")
+            for i, d in enumerate(devices, 1):
+                print(f"{i}. {d.name} ({d.address})")
+            try:
+                choice = int(input("Select device (1-{}): ".format(len(devices))))
+                if 1 <= choice <= len(devices):
+                    device_address = devices[choice - 1].address
+            except:
+                device_address = devices[0].address
+    
+    # NOW create visualizer after device discovery
     print(f"\nInitializing {backend} visualizer...")
     
     if backend == 'plotly':
@@ -119,19 +148,19 @@ async def stream_with_visualization(duration: int = 60, backend: str = 'auto'):
     client.on_heart_rate(process_heart_rate)
     client.on_imu(process_imu)
     
-    # Find device
-    print("\nSearching for Muse device...")
-    device = await client.find_device()
-    
-    if not device:
-        print("No Muse device found!")
-        print("\nMake sure your Muse S is:")
-        print("1. Powered on")
-        print("2. In pairing mode")
-        print("3. Not connected to another device")
-        return
-    
-    print(f"Found: {device.name}")
+    # If we still don't have a device address (for non-PyQtGraph backends)
+    if not device_address:
+        print("\nSearching for Muse device...")
+        device = await client.find_device()
+        if not device:
+            print("No Muse device found!")
+            print("\nMake sure your Muse S is:")
+            print("1. Powered on")
+            print("2. In pairing mode")
+            print("3. Not connected to another device")
+            return
+        device_address = device.address
+        print(f"Found: {device.name} ({device_address})")
     
     # Start streaming in background
     print(f"\nStarting {duration}-second streaming session...")
@@ -141,7 +170,7 @@ async def stream_with_visualization(duration: int = 60, backend: str = 'auto'):
         # For PyQtGraph, stream in background thread
         async def stream_task():
             await client.connect_and_stream(
-                device.address,
+                device_address,
                 duration_seconds=duration,
                 preset='p1034'  # Full sensor suite
             )
@@ -159,7 +188,7 @@ async def stream_with_visualization(duration: int = 60, backend: str = 'auto'):
     else:
         # For Plotly, just stream normally
         success = await client.connect_and_stream(
-            device.address,
+            device_address,
             duration_seconds=duration,
             preset='p1034'
         )
@@ -300,9 +329,20 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        # For Windows, avoid event loop issues
+        # For Windows with PyQtGraph, we need special handling
         if sys.platform == 'win32':
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            # Check if PyQtGraph will be used
+            import argparse
+            parser = argparse.ArgumentParser()
+            parser.add_argument('--backend', default='auto')
+            args, _ = parser.parse_known_args()
+            
+            if args.backend in ['pyqtgraph', 'auto']:
+                # Use default policy for PyQtGraph
+                pass
+            else:
+                # Use selector for other backends
+                asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         
         asyncio.run(main())
     except KeyboardInterrupt:
