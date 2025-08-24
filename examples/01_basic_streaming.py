@@ -8,7 +8,8 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from muse_exact_client import MuseClient
+from muse_stream_client import MuseStreamClient
+from muse_discovery import find_muse_devices
 
 async def main():
     """Stream EEG data for 30 seconds"""
@@ -17,32 +18,46 @@ async def main():
     print("Amused Example: Basic EEG Streaming")
     print("=" * 60)
     
-    # Create client
-    client = MuseClient(verbose=True)
+    # Create client (no saving, just streaming)
+    client = MuseStreamClient(
+        save_raw=False,
+        decode_realtime=True,
+        verbose=True
+    )
     
     # Find Muse device
     print("\nSearching for Muse S device...")
-    device = await client.find_device()
+    devices = await find_muse_devices(timeout=5.0)
     
-    if not device:
+    if not devices:
         print("No Muse device found! Please ensure:")
         print("- Your Muse S is turned on")
         print("- Bluetooth is enabled")
         print("- Device is in pairing mode")
         return
     
+    device = devices[0]
     print(f"Found device: {device.name} ({device.address})")
     
     # Connect and stream
     print("\nConnecting and streaming EEG data...")
     print("This will stream for 30 seconds...")
     
-    success = await client.connect_and_stream(device.address)
+    success = await client.connect_and_stream(
+        device.address,
+        duration_seconds=30,
+        preset='p1035'  # Full sensor mode
+    )
     
     if success:
+        summary = client.get_summary()
         print("\n" + "=" * 60)
         print("Streaming completed successfully!")
-        print(f"Total packets received: {client.packet_count}")
+        print(f"Total packets received: {summary['packets_received']}")
+        if 'eeg_samples' in summary:
+            print(f"EEG samples collected: {summary['eeg_samples']}")
+        if 'ppg_samples' in summary:
+            print(f"PPG samples collected: {summary['ppg_samples']}")
         print("=" * 60)
     else:
         print("\nStreaming failed. Please check device connection.")

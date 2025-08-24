@@ -9,7 +9,8 @@ import os
 import glob
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from muse_stream_client import MuseStreamClient, stream_and_save
+from muse_stream_client import MuseStreamClient
+from muse_discovery import find_muse_devices
 from muse_replay import MuseReplayPlayer, MuseBinaryParser
 
 async def record_session():
@@ -28,11 +29,14 @@ async def record_session():
     )
     
     # Find device
-    device = await client.find_device()
-    if not device:
+    print("\nSearching for Muse device...")
+    devices = await find_muse_devices(timeout=5.0)
+    
+    if not devices:
         print("No Muse device found!")
         return None
     
+    device = devices[0]
     print(f"Found: {device.name}")
     
     # Record for 20 seconds
@@ -42,7 +46,7 @@ async def record_session():
     success = await client.connect_and_stream(
         device.address,
         duration_seconds=duration,
-        preset='p1034'
+        preset='p1035'
     )
     
     if success:

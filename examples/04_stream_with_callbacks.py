@@ -9,6 +9,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from muse_stream_client import MuseStreamClient
+from muse_discovery import find_muse_devices
 import numpy as np
 
 # Global storage for analysis
@@ -42,7 +43,7 @@ def process_eeg(data):
             crossings = np.where(np.diff(np.sign(recent)))[0]
             freq_estimate = len(crossings) / 2.0  # Rough frequency
             
-            print(f"EEG: Mean amplitude: {mean_amplitude:.1f} μV, ~{freq_estimate:.0f} Hz")
+            print(f"EEG: Mean amplitude: {mean_amplitude:.1f} uV, ~{freq_estimate:.0f} Hz")
 
 def process_heart_rate(hr):
     """Process heart rate data"""
@@ -120,12 +121,13 @@ async def main():
     
     # Find device
     print("\nSearching for Muse device...")
-    device = await client.find_device()
+    devices = await find_muse_devices(timeout=5.0)
     
-    if not device:
+    if not devices:
         print("No Muse device found!")
         return
     
+    device = devices[0]
     print(f"Found: {device.name}")
     
     # Stream for 30 seconds
@@ -136,7 +138,7 @@ async def main():
     success = await client.connect_and_stream(
         device.address,
         duration_seconds=duration,
-        preset='p1034'  # Full sensor suite
+        preset='p1035'  # Full sensor suite
     )
     
     if success:
