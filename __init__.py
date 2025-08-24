@@ -8,9 +8,21 @@ No proprietary SDK required - just pure Python and BLE!
 __version__ = "1.0.0"
 __author__ = "nexon33 & Claude"
 
-# Core clients
-from .muse_exact_client import MuseClient
+# Core streaming client
+from .muse_stream_client import MuseStreamClient
+
+# Legacy clients for testing
+from .muse_exact_client import MuseExactClient
 from .muse_sleep_client import MuseSleepClient
+
+# Raw binary format
+from .muse_raw_stream import MuseRawStream, RawPacket
+
+# Real-time decoding
+from .muse_realtime_decoder import MuseRealtimeDecoder, DecodedData
+
+# Replay functionality
+from .muse_replay import MuseReplayPlayer, MuseBinaryParser
 
 # Data processing
 from .muse_integrated_parser import MuseIntegratedParser
@@ -18,17 +30,26 @@ from .muse_sleep_parser import MuseSleepParser
 from .muse_data_parser import MuseDataParser
 
 # Biometric analysis
-from .muse_ppg_heart_rate import PPGHeartRateExtractor
-from .muse_fnirs_processor import FNIRSProcessor
+from .muse_ppg_heart_rate import PPGHeartRateExtractor, HeartRateResult
+from .muse_fnirs_processor import FNIRSProcessor, FNIRSData
 
 __all__ = [
-    "MuseClient",
+    "MuseStreamClient",
+    "MuseExactClient", 
     "MuseSleepClient",
+    "MuseRawStream",
+    "RawPacket",
+    "MuseRealtimeDecoder",
+    "DecodedData",
+    "MuseReplayPlayer",
+    "MuseBinaryParser",
     "MuseIntegratedParser",
     "MuseSleepParser",
     "MuseDataParser",
     "PPGHeartRateExtractor",
+    "HeartRateResult",
     "FNIRSProcessor",
+    "FNIRSData",
 ]
 
 def get_version():
@@ -56,7 +77,7 @@ def about():
     
     Usage:
       import amused
-      client = amused.MuseClient()
+      client = amused.MuseStreamClient()
       # Start streaming...
     
     For more info: https://github.com/nexon33/amused
