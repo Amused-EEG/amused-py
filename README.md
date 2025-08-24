@@ -30,7 +30,7 @@ pip install amused
 
 Or from source:
 ```bash
-git clone https://github.com/yourusername/amused.git
+git clone https://github.com/nexon33/amused.git
 cd amused
 pip install -e .
 ```
@@ -279,9 +279,9 @@ If you use Amused in research:
 ```
 @software{amused2025,
   title = {Amused: A Muse S Direct BLE Implementation},
-  author = {Your Name},
+  author = {Adrian Tadeusz Belmans},
   year = {2025},
-  url = {https://github.com/yourusername/amused}
+  url = {https://github.com/nexon33/amused}
 }
 ```
 
