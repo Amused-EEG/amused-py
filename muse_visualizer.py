@@ -100,7 +100,8 @@ class PyQtGraphVisualizer:
         self.update_rate = update_rate
         
         # Data buffers
-        self.eeg_buffer = DataBuffer(maxlen=window_size, channels=4)
+        # Muse S has 7 EEG channels: TP9, AF7, AF8, TP10, FPz, AUX_R, AUX_L
+        self.eeg_buffer = DataBuffer(maxlen=window_size, channels=7)
         self.ppg_buffer = DataBuffer(maxlen=window_size, channels=3)
         self.imu_buffer = DataBuffer(maxlen=window_size, channels=6)
         self.heart_rate_buffer = DataBuffer(maxlen=60, channels=1)  # 60 seconds of HR
@@ -119,15 +120,19 @@ class PyQtGraphVisualizer:
     
     def _setup_plots(self):
         """Setup plot layouts"""
-        # EEG plots (4 channels)
+        # EEG plots (7 channels: TP9, AF7, AF8, TP10, FPz, AUX_R, AUX_L)
         self.eeg_plots = []
-        eeg_colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4']
+        eeg_channel_names = ['TP9', 'AF7', 'AF8', 'TP10', 'FPz', 'AUX_R', 'AUX_L']
+        eeg_colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFA726', '#AB47BC', '#66BB6A']
         
-        for i in range(4):
-            if i == 0:
-                p = self.win.addPlot(title=f"EEG Channel {i+1}", row=0, col=0, colspan=2)
+        # Arrange EEG plots in a grid: 4 on left, 3 on right side
+        for i in range(7):
+            if i < 4:
+                # First 4 channels on the left (rows 0-3, col 0)
+                p = self.win.addPlot(title=f"EEG {eeg_channel_names[i]}", row=i, col=0)
             else:
-                p = self.win.addPlot(title=f"EEG Channel {i+1}", row=i, col=0, colspan=2)
+                # Last 3 channels on right side, stacked vertically (rows 0-2, col 1)
+                p = self.win.addPlot(title=f"EEG {eeg_channel_names[i]}", row=i-4, col=1)
             
             p.setLabel('left', 'Amplitude', units='μV')
             p.setLabel('bottom', 'Time', units='s')
@@ -276,10 +281,18 @@ class PyQtGraphVisualizer:
             channels = data['channels']
             timestamp = data.get('timestamp', datetime.now().timestamp())
             
+            # Map channel names to buffer indices
+            channel_map = {
+                'TP9': 0, 'AF7': 1, 'AF8': 2, 'TP10': 3,
+                'FPz': 4, 'AUX_R': 5, 'AUX_L': 6,
+                'ch0': 0, 'ch1': 1, 'ch2': 2, 'ch3': 3,
+                'ch4': 4, 'ch5': 5, 'ch6': 6
+            }
+            
             # Add each channel's samples
             for ch_name, samples in channels.items():
-                ch_idx = int(ch_name[-1]) if ch_name.startswith('ch') else 0
-                if ch_idx < 4:
+                ch_idx = channel_map.get(ch_name, -1)
+                if ch_idx >= 0 and ch_idx < 7:
                     for sample in samples:
                         self.eeg_buffer.buffers[ch_idx].append(sample)
                         self.eeg_buffer.timestamps.append(timestamp)
@@ -343,7 +356,8 @@ class PlotlyDashVisualizer:
         self.update_interval = update_interval
         
         # Data buffers
-        self.eeg_buffer = DataBuffer(maxlen=1000, channels=4)
+        # Muse S has 7 EEG channels
+        self.eeg_buffer = DataBuffer(maxlen=1000, channels=7)
         self.ppg_buffer = DataBuffer(maxlen=500, channels=1)
         self.heart_rate_buffer = DataBuffer(maxlen=60, channels=1)
         
@@ -406,23 +420,29 @@ class PlotlyDashVisualizer:
             # Create EEG figure
             times, eeg_data = self.eeg_buffer.get_data()
             
+            # Muse S has 7 EEG channels
+            channel_names = ['TP9', 'AF7', 'AF8', 'TP10', 'FPz', 'AUX_R', 'AUX_L']
             fig_eeg = make_subplots(
-                rows=4, cols=1,
-                subplot_titles=[f'EEG Channel {i+1}' for i in range(4)],
-                vertical_spacing=0.05
+                rows=4, cols=2,
+                subplot_titles=channel_names[:7],
+                vertical_spacing=0.08,
+                horizontal_spacing=0.1
             )
             
             if len(times) > 0:
                 times = times - times[0]
-                colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4']
+                colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFA726', '#AB47BC', '#66BB6A']
                 
-                for i in range(4):
+                # Plot first 4 channels in left column, last 3 in right column
+                for i in range(7):
                     if i < len(eeg_data) and len(eeg_data[i]) > 0:
+                        row = (i % 4) + 1 if i < 4 else (i - 4) + 1
+                        col = 1 if i < 4 else 2
                         fig_eeg.add_trace(
                             go.Scatter(x=times, y=eeg_data[i], 
                                      line=dict(color=colors[i], width=2),
-                                     name=f'Ch{i+1}'),
-                            row=i+1, col=1
+                                     name=channel_names[i]),
+                            row=row, col=col
                         )
             
             fig_eeg.update_layout(
@@ -620,13 +640,16 @@ if __name__ == "__main__":
     # Simulate data updates in a thread
     def simulate_data():
         while True:
-            # Simulate EEG data
+            # Simulate EEG data for all 7 channels
             eeg_data = {
                 'channels': {
-                    'ch0': [np.random.randn() * 100 for _ in range(12)],
-                    'ch1': [np.random.randn() * 100 for _ in range(12)],
-                    'ch2': [np.random.randn() * 100 for _ in range(12)],
-                    'ch3': [np.random.randn() * 100 for _ in range(12)],
+                    'TP9': [np.random.randn() * 100 for _ in range(12)],
+                    'AF7': [np.random.randn() * 100 for _ in range(12)],
+                    'AF8': [np.random.randn() * 100 for _ in range(12)],
+                    'TP10': [np.random.randn() * 100 for _ in range(12)],
+                    'FPz': [np.random.randn() * 100 for _ in range(12)],
+                    'AUX_R': [np.random.randn() * 100 for _ in range(12)],
+                    'AUX_L': [np.random.randn() * 100 for _ in range(12)],
                 },
                 'timestamp': datetime.now().timestamp()
             }

@@ -3,7 +3,7 @@ Example 6: Real-time Visualization
 Stream and visualize Muse S data in real-time with interactive plots
 
 Features:
-- Live EEG waveforms (4 channels)
+- Live EEG waveforms (7 channels: TP9, AF7, AF8, TP10, FPz, AUX_R, AUX_L)
 - PPG heart rate monitoring
 - IMU motion tracking
 - Frequency spectrum analysis
@@ -30,11 +30,13 @@ def process_eeg(data):
     if viz:
         viz.update_eeg(data)
     
-    # Print some stats
+    # Print some stats (show first available channel)
     if 'channels' in data:
-        ch0_samples = data['channels'].get('ch0', [])
-        if ch0_samples:
-            print(f"EEG Ch0: {ch0_samples[0]:.1f} μV", end='\r')
+        for ch_name in ['TP9', 'AF7', 'AF8', 'TP10', 'FPz', 'AUX_R', 'AUX_L', 'ch0']:
+            samples = data['channels'].get(ch_name, [])
+            if samples:
+                print(f"EEG {ch_name}: {samples[0]:.1f} μV", end='\r')
+                break
 
 def process_ppg(data):
     """Process and visualize PPG data"""

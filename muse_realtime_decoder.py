@@ -153,14 +153,18 @@ class MuseRealtimeDecoder:
         max_iterations = len(data)  # Prevent infinite loops
         iterations = 0
         
+        # Muse S has 7 EEG channels: TP9, AF7, AF8, TP10, FPz, AUX_R, AUX_L
+        channel_names = ['TP9', 'AF7', 'AF8', 'TP10', 'FPz', 'AUX_R', 'AUX_L']
+        
         # Extract EEG segments (18 bytes each)
-        while offset < len(data) and iterations < max_iterations:
+        while offset < len(data) and iterations < max_iterations and channel_count < 7:
             iterations += 1
             
             # Try EEG segment (18 bytes)
             if offset + 18 <= len(data) and self._looks_like_eeg(data[offset:offset+18]):
                 samples = self._fast_unpack_eeg(data[offset:offset+18])
-                decoded.eeg[f'ch{channel_count}'] = samples
+                channel_name = channel_names[channel_count] if channel_count < len(channel_names) else f'ch{channel_count}'
+                decoded.eeg[channel_name] = samples
                 self.stats['eeg_samples'] += len(samples)
                 channel_count += 1
                 offset += 18
@@ -222,7 +226,11 @@ class MuseRealtimeDecoder:
                 if decoded.eeg is None:
                     decoded.eeg = {}
                 samples = self._fast_unpack_eeg(data[offset:offset+18])
-                decoded.eeg[f'ch{len(decoded.eeg)}'] = samples
+                # Use proper channel names for Muse S
+                channel_names = ['TP9', 'AF7', 'AF8', 'TP10', 'FPz', 'AUX_R', 'AUX_L']
+                ch_idx = len(decoded.eeg)
+                channel_name = channel_names[ch_idx] if ch_idx < len(channel_names) else f'ch{ch_idx}'
+                decoded.eeg[channel_name] = samples
                 self.stats['eeg_samples'] += len(samples)
                 offset += 18
             else:

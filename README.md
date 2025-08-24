@@ -15,7 +15,7 @@ We actually got access to InteraXon's official SDK - but discovered it **doesn't
 
 ## Features
 
-- **EEG Streaming**: 4-5 channels at 256 Hz
+- **EEG Streaming**: 7 channels at 256 Hz (TP9, AF7, AF8, TP10, FPz, AUX_R, AUX_L)
 - **PPG Heart Rate**: Real-time HR and HRV from 3-wavelength sensors  
 - **fNIRS Blood Oxygenation**: Cerebral hemodynamics (HbO2, HbR, TSI)
 - **IMU Motion**: 9-axis accelerometer + gyroscope
@@ -202,7 +202,7 @@ pip install -r requirements-viz.txt
 ```
 
 ### Features
-- Live EEG waveforms (4 channels)
+- Live EEG waveforms (7 channels: TP9, AF7, AF8, TP10, FPz, AUX_R, AUX_L)
 - PPG heart rate monitoring with trend
 - IMU motion tracking (accel + gyro)
 - Frequency spectrum analysis with band indicators

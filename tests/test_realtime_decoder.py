@@ -27,11 +27,12 @@ class TestRealtimeDecoder(unittest.TestCase):
         
         self.assertEqual(decoded.packet_type, 'EEG_PPG')
         self.assertIsNotNone(decoded.eeg)
-        self.assertIn('ch0', decoded.eeg)
-        self.assertEqual(len(decoded.eeg['ch0']), 12)  # 12 samples
+        # Should decode as TP9 (first channel)
+        self.assertIn('TP9', decoded.eeg)
+        self.assertEqual(len(decoded.eeg['TP9']), 12)  # 12 samples
         
         # Check that samples are in valid range
-        for sample in decoded.eeg['ch0']:
+        for sample in decoded.eeg['TP9']:
             self.assertGreaterEqual(sample, -1000)  # Min μV
             self.assertLessEqual(sample, 1000)      # Max μV
     
