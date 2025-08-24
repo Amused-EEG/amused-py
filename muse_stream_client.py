@@ -96,6 +96,8 @@ class MuseStreamClient:
             'heart_rate': None,
             'packet': None  # Called for every packet
         }
+        
+        # We'll add cleanup later when we have the method defined
     
     def on_eeg(self, callback: Callable[[Dict[str, Any]], None]):
         """Register callback for EEG data"""
@@ -109,7 +111,7 @@ class MuseStreamClient:
         self.user_callbacks['ppg'] = callback
         if self.decoder:
             self.decoder.register_callback('ppg',
-                lambda data: callback({'samples': data.ppg, 'timestamp': data.timestamp}))
+                lambda data: callback({'samples': data.ppg.get('samples', []) if data.ppg else [], 'timestamp': data.timestamp}))
     
     def on_heart_rate(self, callback: Callable[[float], None]):
         """Register callback for heart rate"""
@@ -270,6 +272,27 @@ class MuseStreamClient:
                 if not sensor_enabled:
                     self.log("Failed to enable sensor notifications")
                     return False
+                
+                # Re-register user callbacks with decoder
+                if self.decoder:
+                    # Re-register all callbacks to ensure they're connected
+                    for callback_type in ['eeg', 'ppg', 'heart_rate', 'imu']:
+                        if self.user_callbacks.get(callback_type):
+                            # Clear and re-add
+                            self.decoder.callbacks[callback_type] = []
+                            
+                    if self.user_callbacks['eeg']:
+                        self.decoder.register_callback('eeg',
+                            lambda data: self.user_callbacks['eeg']({'channels': data.eeg, 'timestamp': data.timestamp}))
+                    if self.user_callbacks['ppg']:
+                        self.decoder.register_callback('ppg',
+                            lambda data: self.user_callbacks['ppg']({'samples': data.ppg.get('samples', []) if data.ppg else [], 'timestamp': data.timestamp}))
+                    if self.user_callbacks['heart_rate']:
+                        self.decoder.register_callback('heart_rate',
+                            lambda data: self.user_callbacks['heart_rate'](data.heart_rate) if data.heart_rate else None)
+                    if self.user_callbacks['imu']:
+                        self.decoder.register_callback('imu',
+                            lambda data: self.user_callbacks['imu']({'accel': data.imu.get('accel'), 'gyro': data.imu.get('gyro')}))
                 
                 # Start streaming (SEND TWICE!)
                 self.log("Starting stream...")

@@ -15,11 +15,18 @@ import sys
 import os
 import threading
 from datetime import datetime
+
+# Fix Windows Qt/Bleak conflict BEFORE any other imports
+try:
+    from bleak.backends.winrt.util import allow_sta
+    allow_sta()  # Tell Bleak we're using a GUI that works with asyncio
+except ImportError:
+    pass  # Not Windows or older Bleak version
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from muse_stream_client import MuseStreamClient
 from muse_visualizer import MuseVisualizer, PYQTGRAPH_AVAILABLE, PLOTLY_AVAILABLE
-from muse_discovery_gui import scan_in_thread  # GUI-safe scanning
 
 # Global visualizer instance
 viz = None
@@ -84,35 +91,7 @@ async def stream_with_visualization(duration: int = 60, backend: str = 'auto', d
         print("  pip install plotly dash")
         return
     
-    # If we need to find a device and we're using PyQtGraph, do it BEFORE creating visualizer
-    if not device_address and backend in ['pyqtgraph', 'auto']:
-        print("\nSearching for Muse device (before Qt initialization)...")
-        # Use thread-safe scanning
-        devices = scan_in_thread(timeout=5.0)
-        if not devices:
-            print("No Muse device found!")
-            print("\nMake sure your Muse S is:")
-            print("1. Powered on")
-            print("2. In pairing mode")
-            print("3. Not connected to another device")
-            return
-        
-        # Select device
-        if len(devices) == 1:
-            device_address = devices[0].address
-            print(f"Found: {devices[0].name} ({device_address})")
-        else:
-            print(f"\nFound {len(devices)} devices:")
-            for i, d in enumerate(devices, 1):
-                print(f"{i}. {d.name} ({d.address})")
-            try:
-                choice = int(input("Select device (1-{}): ".format(len(devices))))
-                if 1 <= choice <= len(devices):
-                    device_address = devices[choice - 1].address
-            except:
-                device_address = devices[0].address
-    
-    # NOW create visualizer after device discovery
+    # Create visualizer
     print(f"\nInitializing {backend} visualizer...")
     
     if backend == 'plotly':
@@ -148,31 +127,32 @@ async def stream_with_visualization(duration: int = 60, backend: str = 'auto', d
     client.on_heart_rate(process_heart_rate)
     client.on_imu(process_imu)
     
-    # If we still don't have a device address (for non-PyQtGraph backends)
-    if not device_address:
-        print("\nSearching for Muse device...")
-        device = await client.find_device()
-        if not device:
-            print("No Muse device found!")
-            print("\nMake sure your Muse S is:")
-            print("1. Powered on")
-            print("2. In pairing mode")
-            print("3. Not connected to another device")
-            return
-        device_address = device.address
-        print(f"Found: {device.name} ({device_address})")
+    # Find device
+    print("\nSearching for Muse device...")
+    device = await client.find_device()
+    
+    if not device:
+        print("No Muse device found!")
+        print("\nMake sure your Muse S is:")
+        print("1. Powered on")
+        print("2. In pairing mode")
+        print("3. Not connected to another device")
+        return
+    
+    print(f"Found: {device.name}")
+    device_address = device.address
     
     # Start streaming in background
     print(f"\nStarting {duration}-second streaming session...")
     print("Visualization will update in real-time\n")
     
     if backend == 'pyqtgraph':
-        # For PyQtGraph, stream in background thread
+        # With allow_sta() fix, we can run BLE in a simpler way
         async def stream_task():
             await client.connect_and_stream(
                 device_address,
                 duration_seconds=duration,
-                preset='p1034'  # Full sensor suite
+                preset='p1035'  # Sleep mode with ALL sensors
             )
         
         # Start streaming in background
@@ -190,7 +170,7 @@ async def stream_with_visualization(duration: int = 60, backend: str = 'auto', d
         success = await client.connect_and_stream(
             device_address,
             duration_seconds=duration,
-            preset='p1034'
+            preset='p1035'  # Sleep mode with ALL sensors
         )
         
         if success:

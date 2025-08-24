@@ -23,7 +23,7 @@ MATPLOTLIB_AVAILABLE = False
 
 try:
     import pyqtgraph as pg
-    from pyqtgraph.Qt import QtCore, QtWidgets
+    from pyqtgraph.Qt import QtCore, QtWidgets, QtGui
     PYQTGRAPH_AVAILABLE = True
 except ImportError:
     pass
@@ -47,20 +47,22 @@ except ImportError:
 
 
 class DataBuffer:
-    """Circular buffer for streaming data"""
+    """Circular buffer for streaming data with smart downsampling"""
     
-    def __init__(self, maxlen: int = 1000, channels: int = 1):
+    def __init__(self, maxlen: int = 1000, channels: int = 1, display_points: int = 256):
         """
         Initialize data buffer
         
         Args:
             maxlen: Maximum number of samples to keep
             channels: Number of data channels
+            display_points: Maximum points to display (for performance)
         """
         self.buffers = [deque(maxlen=maxlen) for _ in range(channels)]
         self.timestamps = deque(maxlen=maxlen)
         self.maxlen = maxlen
         self.channels = channels
+        self.display_points = display_points
     
     def add_samples(self, samples: List[float], timestamp: Optional[float] = None):
         """Add new samples to buffer"""
@@ -75,23 +77,30 @@ class DataBuffer:
             for i, sample in enumerate(samples[:self.channels]):
                 self.buffers[i].append(sample)
     
-    def get_data(self) -> tuple:
-        """Get current buffer data as numpy arrays"""
+    def get_data(self, downsample: bool = True) -> tuple:
+        """Get current buffer data as numpy arrays with optional downsampling"""
         times = np.array(self.timestamps) if self.timestamps else np.array([])
         data = [np.array(buf) if buf else np.array([]) for buf in self.buffers]
+        
+        # Smart downsampling for display - keep only last N points
+        if downsample and len(times) > self.display_points:
+            # Take only the most recent display_points samples
+            times = times[-self.display_points:]
+            data = [d[-self.display_points:] if len(d) > self.display_points else d for d in data]
+        
         return times, data
 
 
 class PyQtGraphVisualizer:
     """High-performance real-time visualizer using PyQtGraph"""
     
-    def __init__(self, window_size: int = 2560, update_rate: int = 30):
+    def __init__(self, window_size: int = 2560, update_rate: int = 15):
         """
         Initialize PyQtGraph visualizer
         
         Args:
             window_size: Number of samples to display
-            update_rate: Display refresh rate in Hz
+            update_rate: Display refresh rate in Hz (reduced for performance)
         """
         if not PYQTGRAPH_AVAILABLE:
             raise ImportError("PyQtGraph not installed. Install with: pip install pyqtgraph")
@@ -99,15 +108,18 @@ class PyQtGraphVisualizer:
         self.window_size = window_size
         self.update_rate = update_rate
         
-        # Data buffers with sensible defaults
+        # Data buffers with sensible defaults and display downsampling
         # Muse S has 7 EEG channels: TP9, AF7, AF8, TP10, FPz, AUX_R, AUX_L
         # Default window_size = 2560 samples = 10 seconds at 256 Hz for EEG
-        self.eeg_buffer = DataBuffer(maxlen=window_size, channels=7)
-        # PPG at 64 Hz: 10 seconds = 640 samples
-        self.ppg_buffer = DataBuffer(maxlen=window_size//4 if window_size == 2560 else window_size, channels=3)
-        # IMU at 52 Hz: 10 seconds = 520 samples
-        self.imu_buffer = DataBuffer(maxlen=window_size//5 if window_size == 2560 else window_size, channels=6)
-        self.heart_rate_buffer = DataBuffer(maxlen=120, channels=1)  # 120 HR points = 2 minutes
+        # But we only display 256 points for performance
+        self.eeg_buffer = DataBuffer(maxlen=window_size, channels=7, display_points=256)
+        # PPG at 64 Hz: 10 seconds = 640 samples, display 128 points
+        self.ppg_buffer = DataBuffer(maxlen=window_size//4 if window_size == 2560 else window_size, 
+                                   channels=3, display_points=128)
+        # IMU at 52 Hz: 10 seconds = 520 samples, display 104 points
+        self.imu_buffer = DataBuffer(maxlen=window_size//5 if window_size == 2560 else window_size, 
+                                   channels=6, display_points=104)
+        self.heart_rate_buffer = DataBuffer(maxlen=120, channels=1, display_points=60)  # 120 HR points = 2 minutes
         
         # Setup GUI
         self.app = QtWidgets.QApplication([])
@@ -137,8 +149,8 @@ class PyQtGraphVisualizer:
                 # Last 3 channels on right side, stacked vertically (rows 0-2, col 1)
                 p = self.win.addPlot(title=f"EEG {eeg_channel_names[i]}", row=i-4, col=1)
             
-            p.setLabel('left', 'Amplitude', units='μV')
-            p.setLabel('bottom', 'Time', units='s')
+            p.setLabel('left', 'μV', units='')
+            p.setLabel('bottom', 'Samples', units='')
             p.setYRange(-500, 500)
             p.showGrid(x=True, y=True, alpha=0.3)
             
@@ -148,6 +160,12 @@ class PyQtGraphVisualizer:
         # PPG/Heart Rate plot
         self.ppg_plot = self.win.addPlot(title="PPG & Heart Rate", row=0, col=2, rowspan=2)
         self.ppg_plot.setLabel('left', 'PPG', units='AU')
+        
+        # Add heart rate text display
+        self.hr_text = pg.TextItem(text="-- BPM", anchor=(0, 0), color='w')
+        self.hr_text.setFont(QtGui.QFont('Arial', 16, QtGui.QFont.Bold))
+        self.ppg_plot.addItem(self.hr_text)
+        self.hr_text.setPos(0, 0)
         self.ppg_plot.setLabel('bottom', 'Time', units='s')
         self.ppg_plot.showGrid(x=True, y=True, alpha=0.3)
         
@@ -221,43 +239,61 @@ class PyQtGraphVisualizer:
     
     def _update_plots(self):
         """Update all plots with latest data"""
-        # Update EEG plots
-        times, eeg_data = self.eeg_buffer.get_data()
+        # Update EEG plots with downsampled data
+        times, eeg_data = self.eeg_buffer.get_data(downsample=True)
         if len(times) > 0:
-            # Normalize time to start from 0
-            times = times - times[0] if len(times) > 0 else times
-            
+            # Use simple index-based x-axis for performance
             for i, curve in enumerate(self.eeg_plots):
                 if i < len(eeg_data) and len(eeg_data[i]) > 0:
-                    curve.setData(times, eeg_data[i])
+                    # Apply simple rolling mean for smoothing
+                    data = eeg_data[i]
+                    if len(data) > 5:
+                        # Simple moving average with window of 5
+                        kernel = np.ones(5) / 5
+                        data = np.convolve(data, kernel, mode='valid')
+                    
+                    x_data = np.arange(len(data))
+                    if len(x_data) > 0:
+                        curve.setData(x_data, data)
             
-            # Update spectrum if we have EEG data
-            if len(eeg_data[0]) > 128:  # Need enough samples for FFT
+            # Update spectrum less frequently
+            if len(eeg_data) > 0 and len(eeg_data[0]) > 128 and np.random.rand() < 0.05:  # Only 5% of updates
                 self._update_spectrum(eeg_data[0])
         
-        # Update PPG plots
-        times, ppg_data = self.ppg_buffer.get_data()
-        if len(times) > 0:
-            times = times - times[0]
+        # Update PPG plots with downsampling
+        times, ppg_data = self.ppg_buffer.get_data(downsample=True)
+        if len(times) > 0 and len(ppg_data) > 0:
+            # Use index-based x-axis for PPG too
             for i, curve in enumerate(self.ppg_curves):
                 if i < len(ppg_data) and len(ppg_data[i]) > 0:
-                    curve.setData(times, ppg_data[i])
+                    # Data is already downsampled
+                    x_data = np.arange(len(ppg_data[i]))
+                    y_data = ppg_data[i]
+                    if len(x_data) > 0:
+                        curve.setData(x_data, y_data)
         
         # Update heart rate
-        times, hr_data = self.heart_rate_buffer.get_data()
-        if len(times) > 0:
-            times = times - times[0]
-            if len(hr_data[0]) > 0:
-                self.hr_curve.setData(times, hr_data[0])
+        times, hr_data = self.heart_rate_buffer.get_data(downsample=True)
+        if len(times) > 0 and len(hr_data) > 0:
+            # Use index-based x-axis
+            data = hr_data[0]
+            if len(data) > 0:
+                x_data = np.arange(len(data))
+                self.hr_curve.setData(x_data, data)
+                # Update the text label with current HR
+                current_hr = data[-1]
+                self.hr_text.setText(f"{current_hr:.0f} BPM")
         
-        # Update IMU plots
-        times, imu_data = self.imu_buffer.get_data()
-        if len(times) > 0:
-            times = times - times[0]
+        # Update IMU plots with downsampling
+        times, imu_data = self.imu_buffer.get_data(downsample=True)
+        if len(times) > 0 and len(imu_data) > 0:
             # First 3 channels are accelerometer
             for i in range(3):
                 if i < len(imu_data) and len(imu_data[i]) > 0:
-                    self.accel_curves[i].setData(times, imu_data[i])
+                    x_data = np.arange(len(imu_data[i]))
+                    y_data = imu_data[i]
+                    if len(x_data) > 0:
+                        self.accel_curves[i].setData(x_data, y_data)
     
     def _update_spectrum(self, eeg_data: np.ndarray):
         """Update frequency spectrum plot"""
@@ -298,6 +334,8 @@ class PyQtGraphVisualizer:
                 if ch_idx >= 0 and ch_idx < 7:
                     for sample in samples:
                         self.eeg_buffer.buffers[ch_idx].append(sample)
+                    # Add timestamps for each sample
+                    for _ in range(len(samples)):
                         self.eeg_buffer.timestamps.append(timestamp)
     
     def update_ppg(self, data: Dict):
@@ -306,9 +344,28 @@ class PyQtGraphVisualizer:
             samples = data['samples']
             timestamp = data.get('timestamp', datetime.now().timestamp())
             
-            # Assuming samples are for IR channel
-            for sample in samples:
-                self.ppg_buffer.buffers[0].append(sample)
+            # Handle PPG samples (could be dict with IR, Red, Ambient)
+            if isinstance(samples, dict):
+                # Extract IR, Red, Ambient channels if available
+                for idx, key in enumerate(['ir', 'red', 'ambient']):
+                    if key in samples and idx < 3:
+                        channel_samples = samples[key]
+                        if isinstance(channel_samples, list):
+                            for sample in channel_samples:
+                                self.ppg_buffer.buffers[idx].append(sample)
+                                self.ppg_buffer.timestamps.append(timestamp)
+                        else:
+                            self.ppg_buffer.buffers[idx].append(channel_samples)
+                            self.ppg_buffer.timestamps.append(timestamp)
+            elif isinstance(samples, list):
+                # Single channel PPG data
+                for sample in samples:
+                    if isinstance(sample, (int, float)):
+                        self.ppg_buffer.buffers[0].append(sample)
+                        self.ppg_buffer.timestamps.append(timestamp)
+            elif isinstance(samples, (int, float)):
+                # Single sample
+                self.ppg_buffer.buffers[0].append(samples)
                 self.ppg_buffer.timestamps.append(timestamp)
     
     def update_heart_rate(self, heart_rate: float):
