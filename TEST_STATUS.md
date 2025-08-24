@@ -1,20 +1,21 @@
 # Test Status
 
 ## Current Test Results
-- **41 tests passing** ✅
-- **6 tests failing** (minor issues, non-critical)
+- **47 tests passing** ✅ 
+- **0 tests failing** 🎉
 
 ## Passing Test Categories
 ✅ Raw binary stream operations (8/8 tests)
-✅ Real-time decoder core functionality (5/7 tests) 
-✅ Basic PPG heart rate extraction (4/6 tests)
-✅ fNIRS processor core functions (5/6 tests)
-✅ Package structure and imports (3/3 tests)
+✅ Real-time decoder functionality (7/7 tests) 
+✅ PPG heart rate extraction (6/6 tests)
+✅ fNIRS processor functions (6/6 tests)
+✅ Integration tests (11/11 tests)
+✅ Package structure and imports (9/9 tests)
 
-## Known Issues (to be fixed)
-- Some integration tests need mock data adjustments
-- HRV calculation needs minimum data validation
-- Hypoxia detection threshold calibration needed
+## Test Data
+- Tests now use **real captured data** from Muse S device
+- 5 seconds of real packets stored in `tests/test_data/`
+- Automatic fallback to synthetic data if real data unavailable
 
 ## Running Tests
 
