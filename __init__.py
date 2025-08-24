@@ -33,6 +33,10 @@ from .muse_data_parser import MuseDataParser
 from .muse_ppg_heart_rate import PPGHeartRateExtractor, HeartRateResult
 from .muse_fnirs_processor import FNIRSProcessor, FNIRSData
 
+# Device configuration
+from .muse_config import MuseDeviceConfig, MuseDevice
+from .amused_config import AmusedConfig, quick_setup, set_viz_time, show_settings
+
 __all__ = [
     "MuseStreamClient",
     "MuseExactClient", 
@@ -50,6 +54,12 @@ __all__ = [
     "HeartRateResult",
     "FNIRSProcessor",
     "FNIRSData",
+    "MuseDeviceConfig",
+    "MuseDevice",
+    "AmusedConfig",
+    "quick_setup",
+    "set_viz_time",
+    "show_settings",
 ]
 
 def get_version():
@@ -67,11 +77,13 @@ def about():
     Open source BLE implementation for Muse S
     
     Features:
-    - EEG streaming (12 channels, 256 Hz)
+    - EEG streaming (7 channels, 256 Hz)
     - PPG heart rate monitoring (64 Hz)
     - fNIRS blood oxygenation
     - IMU motion tracking
     - Sleep monitoring (8+ hours)
+    - Device discovery & configuration
+    - Configurable visualization buffers
     
     No proprietary SDK required!
     

@@ -131,7 +131,7 @@ class TestDecodedData(unittest.TestCase):
         data = DecodedData(
             timestamp=datetime.datetime.now(),
             packet_type='TEST',
-            eeg={'ch0': [1, 2, 3]},
+            eeg={'TP9': [1, 2, 3]},  # Use proper channel name
             ppg={'samples': [100, 200]},
             imu={'accel': [0, 0, 1]},
             heart_rate=72.5,
@@ -140,7 +140,7 @@ class TestDecodedData(unittest.TestCase):
         )
         
         self.assertEqual(data.packet_type, 'TEST')
-        self.assertEqual(len(data.eeg['ch0']), 3)
+        self.assertEqual(len(data.eeg['TP9']), 3)
         self.assertEqual(data.heart_rate, 72.5)
         self.assertEqual(data.battery, 85)
 

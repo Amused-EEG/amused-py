@@ -85,7 +85,7 @@ class DataBuffer:
 class PyQtGraphVisualizer:
     """High-performance real-time visualizer using PyQtGraph"""
     
-    def __init__(self, window_size: int = 1000, update_rate: int = 30):
+    def __init__(self, window_size: int = 2560, update_rate: int = 30):
         """
         Initialize PyQtGraph visualizer
         
@@ -99,12 +99,15 @@ class PyQtGraphVisualizer:
         self.window_size = window_size
         self.update_rate = update_rate
         
-        # Data buffers
+        # Data buffers with sensible defaults
         # Muse S has 7 EEG channels: TP9, AF7, AF8, TP10, FPz, AUX_R, AUX_L
+        # Default window_size = 2560 samples = 10 seconds at 256 Hz for EEG
         self.eeg_buffer = DataBuffer(maxlen=window_size, channels=7)
-        self.ppg_buffer = DataBuffer(maxlen=window_size, channels=3)
-        self.imu_buffer = DataBuffer(maxlen=window_size, channels=6)
-        self.heart_rate_buffer = DataBuffer(maxlen=60, channels=1)  # 60 seconds of HR
+        # PPG at 64 Hz: 10 seconds = 640 samples
+        self.ppg_buffer = DataBuffer(maxlen=window_size//4 if window_size == 2560 else window_size, channels=3)
+        # IMU at 52 Hz: 10 seconds = 520 samples
+        self.imu_buffer = DataBuffer(maxlen=window_size//5 if window_size == 2560 else window_size, channels=6)
+        self.heart_rate_buffer = DataBuffer(maxlen=120, channels=1)  # 120 HR points = 2 minutes
         
         # Setup GUI
         self.app = QtWidgets.QApplication([])
@@ -355,11 +358,11 @@ class PlotlyDashVisualizer:
         self.port = port
         self.update_interval = update_interval
         
-        # Data buffers
+        # Data buffers with appropriate sizes
         # Muse S has 7 EEG channels
-        self.eeg_buffer = DataBuffer(maxlen=1000, channels=7)
-        self.ppg_buffer = DataBuffer(maxlen=500, channels=1)
-        self.heart_rate_buffer = DataBuffer(maxlen=60, channels=1)
+        self.eeg_buffer = DataBuffer(maxlen=2560, channels=7)  # 10 seconds at 256 Hz
+        self.ppg_buffer = DataBuffer(maxlen=640, channels=3)   # 10 seconds at 64 Hz
+        self.heart_rate_buffer = DataBuffer(maxlen=120, channels=1)  # 2 minutes of HR
         
         # Setup Dash app
         self.app = dash.Dash(__name__)
@@ -547,16 +550,28 @@ class PlotlyDashVisualizer:
 class MuseVisualizer:
     """Main visualizer class with backend selection"""
     
-    def __init__(self, backend: str = 'auto', **kwargs):
+    def __init__(self, backend: str = 'auto', use_config: bool = True, **kwargs):
         """
         Initialize visualizer with specified backend
         
         Args:
             backend: 'pyqtgraph', 'plotly', 'matplotlib', or 'auto'
-            **kwargs: Backend-specific arguments
+            use_config: Use buffer sizes from configuration
+            **kwargs: Backend-specific arguments (override config if provided)
         """
         self.backend = backend
         self.visualizer = None
+        
+        # Load configuration if requested
+        if use_config:
+            try:
+                from muse_config import MuseDeviceConfig
+                config = MuseDeviceConfig()
+                # Apply config buffer sizes if not overridden
+                if 'window_size' not in kwargs:
+                    kwargs['window_size'] = config.get_buffer_size('eeg_window')
+            except ImportError:
+                pass  # Config not available, use defaults
         
         if backend == 'auto':
             if PYQTGRAPH_AVAILABLE:

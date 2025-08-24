@@ -367,7 +367,9 @@ def example_realtime_processing():
     
     # Register callbacks for different data types
     def on_eeg(data: DecodedData):
-        print(f"EEG: {len(data.eeg)} channels, first sample: {data.eeg['ch0'][0]:.1f} μV")
+        # Get first available channel
+        first_channel = next(iter(data.eeg.keys()))
+        print(f"EEG: {len(data.eeg)} channels, {first_channel}: {data.eeg[first_channel][0]:.1f} μV")
     
     def on_heart_rate(data: DecodedData):
         print(f"Heart Rate: {data.heart_rate:.0f} BPM")

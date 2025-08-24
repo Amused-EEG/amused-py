@@ -20,7 +20,7 @@ def process_eeg(data):
     """Process EEG data in real-time"""
     global eeg_buffer
     
-    # data contains {'channels': {ch0: [...], ch1: [...]}, 'timestamp': ...}
+    # data contains {'channels': {'TP9': [...], 'AF7': [...], ...}, 'timestamp': ...}
     if 'channels' in data and data['channels']:
         # Get first channel
         first_channel = list(data['channels'].keys())[0]
