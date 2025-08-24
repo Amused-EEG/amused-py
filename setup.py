@@ -11,7 +11,7 @@ setup(
     name="amused",
     version="1.0.0",
     author="nexon33 & Claude",
-    description="A Muse S Direct - Open source BLE protocol for Muse S EEG headsets",
+    description="First open-source BLE protocol for Muse S EEG. Stream brain waves, heart rate & blood oxygen without proprietary SDKs",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/nexon33/amused",
