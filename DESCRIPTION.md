@@ -9,7 +9,13 @@
 
 Finally, the breakthrough the neuroscience and BCI community has been waiting for! Amused is the **first publicly available** reverse-engineered implementation of the Muse S Bluetooth Low Energy protocol. 
 
-After countless forum posts and GitHub issues requesting this capability, we've cracked the code that InteraXon's proprietary SDK has kept locked away. The key discovery? The `dc001` streaming command must be sent TWICE - a critical detail that stumped everyone who tried before.
+Here's the kicker: **We actually got access to InteraXon's official SDK, but it doesn't provide what researchers really need.** The SDK restricts you to their high-level abstractions, doesn't expose raw sensor access, and locks you into their ecosystem. Even with SDK access, you can't:
+- Access the raw BLE protocol
+- Modify streaming parameters
+- Build custom integrations
+- Have full control over your data
+
+So we did what had to be done - reverse-engineered the entire BLE protocol from scratch. After countless hours of packet sniffing and analysis, we discovered the critical detail: The `dc001` streaming command must be sent TWICE. This undocumented requirement stumped everyone who tried before.
 
 ### What Makes This Special
 
@@ -17,6 +23,7 @@ After countless forum posts and GitHub issues requesting this capability, we've 
 🔓 **Truly Open**: MIT licensed, no proprietary dependencies  
 🧪 **Research Ready**: Direct access to raw sensor data for your experiments  
 💡 **Community Driven**: Built by researchers, for researchers  
+⚡ **Beyond the SDK**: More control than even the official SDK provides  
 
 ### Complete Sensor Access
 
@@ -58,9 +65,22 @@ client = amused.MuseSleepClient()  # Full sensors
 await client.connect_and_monitor()  # Start streaming!
 ```
 
+### SDK vs Amused - The Difference
+
+| Feature | Official SDK | Amused |
+|---------|-------------|---------|
+| Raw BLE protocol access | ❌ | ✅ |
+| Custom streaming modes | ❌ | ✅ |
+| Direct sensor control | ❌ | ✅ |
+| Modify packet structure | ❌ | ✅ |
+| No licensing restrictions | ❌ | ✅ |
+| Works without Muse app | ❌ | ✅ |
+| Source code available | ❌ | ✅ |
+| Community contributions | ❌ | ✅ |
+
 ### Community Impact
 
-For years, researchers and developers have been forced to use InteraXon's closed SDK, limiting what they could build and research. With Amused, you have complete freedom to:
+For years, researchers and developers have been forced to use InteraXon's closed SDK, limiting what they could build and research. Even those who got SDK access (like us) found it insufficient for real research needs. With Amused, you have complete freedom to:
 - Modify the protocol
 - Access raw unfiltered data
 - Build commercial applications

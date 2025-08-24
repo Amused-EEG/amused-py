@@ -7,9 +7,11 @@
 
 > **Finally!** Direct BLE connection to Muse S without proprietary SDKs. We're quite *amused* that we cracked the protocol nobody else has published online!
 
-## 🎉 Key Breakthrough
+## 🎉 The Real Story
 
-After extensive reverse engineering, we discovered the critical sequence needed to stream from Muse S devices. The most important finding: **the `dc001` command must be sent TWICE** - a detail that has prevented others from succeeding.
+We actually got access to InteraXon's official SDK - but discovered it **doesn't provide the low-level control researchers need**. The SDK locks you into their framework, limits data access, and doesn't expose the raw protocol. So we reverse-engineered the BLE communication from scratch.
+
+**Key breakthrough:** The `dc001` command must be sent TWICE to start streaming - a critical detail not in any documentation!
 
 ## Features
 
