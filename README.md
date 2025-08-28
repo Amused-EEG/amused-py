@@ -1,6 +1,6 @@
 # Amused - A Muse S Direct BLE Implementation
 
-**The first open-source BLE protocol implementation for Muse S headsets**
+**The first open-source BLE protocol implementation for Muse S athena headsets**
 
 (note, current implementation is not yet complete, data is still scrambled and I'm still reverse engineering this)
 
