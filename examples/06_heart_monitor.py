@@ -20,7 +20,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 try:
     from bleak.backends.winrt.util import allow_sta
     allow_sta()
-except ImportError:
+except (ImportError, AttributeError, OSError):
     pass
 
 import pyqtgraph as pg
@@ -39,10 +39,13 @@ import queue
 data_queue = queue.Queue()
 
 def process_ppg(data):
-    if 'samples' in data and data['samples']:
-        samples = data['samples']
-        if isinstance(samples, list) and len(samples) > 0:
-            data_queue.put(('ppg', samples))
+    channels = data.get('channels', {})
+    if channels:
+        # Use first available channel (LO_NIR is best for HR)
+        for ch_name, samples in channels.items():
+            if isinstance(samples, list) and len(samples) > 0:
+                data_queue.put(('ppg', samples))
+                break
 
 def process_heart_rate(hr):
     if hr and hr > 0:
@@ -178,7 +181,7 @@ def main():
     # Main heart rate display
     hr_box = win.addViewBox(row=1, col=0, colspan=2, rowspan=2)
     hr_text = pg.TextItem(text="--", anchor=(0.5, 0.5))
-    hr_text.setFont(QtGui.QFont('Arial', 96, QtGui.QFont.Bold))
+    hr_text.setFont(QtGui.QFont('Arial', 96, QtGui.QFont.Weight.Bold))
     hr_text.setColor('#E91E63')
     hr_box.addItem(hr_text)
     hr_text.setPos(0.5, 0.5)
@@ -194,7 +197,7 @@ def main():
     # Zone indicator
     zone_box = win.addViewBox(row=1, col=2)
     zone_text = pg.TextItem(text="---", anchor=(0.5, 0.5))
-    zone_text.setFont(QtGui.QFont('Arial', 18, QtGui.QFont.Bold))
+    zone_text.setFont(QtGui.QFont('Arial', 18, QtGui.QFont.Weight.Bold))
     zone_box.addItem(zone_text)
     zone_text.setPos(0.5, 0.5)
     
@@ -215,9 +218,9 @@ def main():
     hr_curve = hr_plot.plot(pen=pg.mkPen(color='#E91E63', width=3))
     
     # Add zone lines
-    hr_plot.addLine(y=60, pen=pg.mkPen('#00BCD4', width=1, style=QtCore.Qt.DashLine))
-    hr_plot.addLine(y=100, pen=pg.mkPen('#FFC107', width=1, style=QtCore.Qt.DashLine))
-    hr_plot.addLine(y=140, pen=pg.mkPen('#F44336', width=1, style=QtCore.Qt.DashLine))
+    hr_plot.addLine(y=60, pen=pg.mkPen('#00BCD4', width=1, style=QtCore.Qt.PenStyle.DashLine))
+    hr_plot.addLine(y=100, pen=pg.mkPen('#FFC107', width=1, style=QtCore.Qt.PenStyle.DashLine))
+    hr_plot.addLine(y=140, pen=pg.mkPen('#F44336', width=1, style=QtCore.Qt.PenStyle.DashLine))
     
     # Status bar
     status_box = win.addViewBox(row=5, col=0, colspan=3)
@@ -241,7 +244,7 @@ def main():
     print("Monitoring heart rate...")
     print("Close window to stop\n")
     
-    app.exec_()
+    app.exec()
     print("\nDone")
 
 if __name__ == "__main__":

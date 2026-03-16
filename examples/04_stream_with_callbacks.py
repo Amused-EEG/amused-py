@@ -67,9 +67,10 @@ def process_imu(data):
     
     if 'accel' in data and data['accel']:
         accel = data['accel']
-        # Calculate magnitude
-        magnitude = np.sqrt(sum(x**2 for x in accel))
-        imu_motion.append(magnitude)
+        # accel is now a list of samples, each sample is [x, y, z]
+        for sample in accel:
+            magnitude = np.sqrt(sum(x**2 for x in sample))
+            imu_motion.append(magnitude)
         
         # Detect movement
         if len(imu_motion) >= 10:
