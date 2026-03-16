@@ -12,91 +12,100 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from muse_raw_stream import MuseRawStream, RawPacket
 from muse_realtime_decoder import MuseRealtimeDecoder, DecodedData
+import muse_athena_protocol as proto
+
+
+def build_tag_packet(first_tag, first_data):
+    """Build a synthetic TAG-based packet for testing."""
+    header = bytearray(14)
+    header[9] = first_tag
+    return bytes(header) + first_data
+
 
 class TestCoreComponents(unittest.TestCase):
     """Test that core components can be imported and instantiated"""
-    
+
     def test_imports(self):
         """Test all imports work"""
-        # These should not raise ImportError
         from muse_stream_client import MuseStreamClient
         from muse_replay import MuseReplayPlayer, MuseBinaryParser
         from muse_ppg_heart_rate import PPGHeartRateExtractor
         from muse_fnirs_processor import FNIRSProcessor
-        
-        # Verify classes exist
+        import muse_athena_protocol
+
         self.assertTrue(MuseStreamClient)
         self.assertTrue(MuseReplayPlayer)
         self.assertTrue(PPGHeartRateExtractor)
         self.assertTrue(FNIRSProcessor)
-    
+        self.assertTrue(muse_athena_protocol)
+
     def test_decoder_creation(self):
         """Test decoder can be created"""
         decoder = MuseRealtimeDecoder()
         self.assertIsNotNone(decoder)
-        
-        # Test simple decode
-        packet = bytes([0xDF, 0x00, 0x00, 0x00] + [0x80] * 16)
+
+        packet = build_tag_packet(proto.TAG_EEG_4CH, bytes(28))
         result = decoder.decode(packet)
         self.assertIsNotNone(result)
         self.assertIsInstance(result, DecodedData)
-    
+        self.assertIsNotNone(result.eeg)
+
     def test_raw_stream_basic(self):
         """Test raw stream basic operations"""
         with tempfile.NamedTemporaryFile(suffix='.bin', delete=False) as tmp:
             filepath = tmp.name
-        
+
         try:
-            # Write
             stream = MuseRawStream(filepath)
             stream.open_write()
-            stream.write_packet(b'\xDF\x00\x01\x02')
+            stream.write_packet(b'\x00\x00\x01\x02')
             stream.close()
-            
-            # Read
+
             stream.open_read()
             packets = list(stream.read_packets())
             stream.close()
-            
+
             self.assertEqual(len(packets), 1)
-            self.assertEqual(packets[0].data, b'\xDF\x00\x01\x02')
+            self.assertEqual(packets[0].data, b'\x00\x00\x01\x02')
         finally:
             if os.path.exists(filepath):
                 os.unlink(filepath)
-    
+
     def test_dataclass_creation(self):
         """Test data classes can be created"""
-        # RawPacket
         packet = RawPacket(
             timestamp=datetime.datetime.now(),
             packet_num=1,
-            packet_type=0xDF,
+            packet_type=0x00,
             data=b'\x00\x01'
         )
         self.assertEqual(packet.packet_num, 1)
-        
-        # DecodedData
+
         decoded = DecodedData(
             timestamp=datetime.datetime.now(),
             packet_type='TEST'
         )
         self.assertEqual(decoded.packet_type, 'TEST')
 
+    def test_protocol_constants(self):
+        """Test protocol constants are accessible"""
+        self.assertEqual(proto.EEG_SCALE, 1450.0 / 16383.0)
+        self.assertIn(proto.TAG_EEG_4CH, proto.SENSOR_CONFIG)
+        self.assertEqual(len(proto.EEG_CHANNELS_4), 4)
+        self.assertEqual(len(proto.OPTICS_CHANNELS_8), 8)
+
+
 class TestPackageStructure(unittest.TestCase):
     """Test package can be imported properly"""
-    
+
     def test_package_import(self):
         """Test main package import"""
         import amused
-        
-        # Test version
+
         self.assertTrue(hasattr(amused, '__version__'))
-        
-        # Test main classes are exposed
         self.assertTrue(hasattr(amused, 'MuseStreamClient'))
         self.assertTrue(hasattr(amused, 'PPGHeartRateExtractor'))
         self.assertTrue(hasattr(amused, 'FNIRSProcessor'))
 
 if __name__ == '__main__':
-    # Run with minimal verbosity for speed
     unittest.main(verbosity=1)
