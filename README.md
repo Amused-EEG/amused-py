@@ -2,8 +2,6 @@
 
 **The first open-source BLE protocol implementation for Muse S athena headsets**
 
-(note, current implementation is not yet complete, data is still scrambled and I'm still reverse engineering this)
-
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -13,15 +11,16 @@
 
 We reverse-engineered the BLE communication from scratch to provide researchers with full control over their Muse S devices. 
 
-**Key breakthrough:** The `dc001` command must be sent TWICE to start streaming - a critical detail not in any documentation!
+**Key breakthrough:** The Athena requires a specific init sequence -- `dc001` must be sent TWICE (first with preset `p21`, then after switching to `p1034`/`p1035`). This critical detail is not in any documentation!
 
 ## Features
 
-- **EEG Streaming**: 7 channels at 256 Hz (TP9, AF7, AF8, TP10, FPz, AUX_R, AUX_L)
-- **PPG Heart Rate**: Real-time HR and HRV from photoplethysmography sensors  
-- **IMU Motion**: 9-axis accelerometer + gyroscope
+- **EEG Streaming**: 4 channels at 256 Hz (TP9, AF7, AF8, TP10) with 14-bit resolution
+- **PPG/fNIRS Optics**: 8 channels at 64 Hz (850nm + 735nm, inner + outer sensors)
+- **Heart Rate**: Real-time HR and HRV from PPG optics
+- **IMU Motion**: 6-axis accelerometer + gyroscope at 52 Hz
 - **Binary Recording**: 10x more efficient than CSV with replay capability
-- **Real-time Visualization**: Multiple visualization options including band powers
+- **Real-time Visualization**: Band powers, heart rate monitor, frequency display
 - **No SDK Required**: Pure Python with BLE - no proprietary libraries!
 
 ## Installation
@@ -211,26 +210,41 @@ await client.connect_and_stream(device.address)
 
 ## Protocol Details
 
-The Muse S uses Bluetooth Low Energy (BLE) with a custom protocol:
+The Muse S Athena (Gen 3, MS_03) uses Bluetooth Low Energy with a custom GATT profile. All sensor data is multiplexed through a single BLE characteristic (`273e0013`) using TAG-based subpackets.
 
-### Connection Sequence
+### Connection Sequence (Athena init)
 1. Connect to device
-2. Enable notifications on control characteristic
-3. Send halt command (`0x02680a`)
-4. Set preset (`p1035` for full sensors)
-5. Enable sensor notifications
-6. Send start command (`dc001`) **TWICE**
-7. Stream data
+2. Enable control notifications on `273e0001`
+3. Handshake: `v6` (version), `s` (status), `h` (halt)
+4. Set initial preset `p21`
+5. Enable sensor notifications on `273e0013`
+6. Send `dc001` + `L1` (primes the device)
+7. Halt, switch to target preset (`p1034` for full sensors)
+8. Send `dc001` + `L1` again (starts actual streaming)
+
+The `dc001` command must be sent **twice** -- once with preset `p21`, then again after switching to the target preset. This is the critical undocumented detail.
 
 ### Presets
 - `p21`: Basic EEG only
-- `p1034`: Sleep mode preset 1
-- `p1035`: Full sensor mode (recommended)
+- `p1034`: Full sensors (EEG 4ch + IMU + Optics 8ch) -- recommended
+- `p1035`: Alternative full sensor preset
 
-### Packet Types
-- `0xDF`: EEG + PPG combined
-- `0xF4`: IMU (accelerometer + gyroscope)
-- `0xDB`, `0xD9`: Mixed sensor data
+### Subpacket TAGs
+All sensor data arrives as subpackets within each BLE notification:
+
+| TAG  | Type    | Channels | Samples/pkt | Rate    | Data bytes |
+|------|---------|----------|-------------|---------|------------|
+| 0x11 | EEG     | 4        | 4           | 256 Hz  | 28         |
+| 0x12 | EEG     | 8        | 2           | 256 Hz  | 28         |
+| 0x47 | ACCGYRO | 6        | 3           | 52 Hz   | 36         |
+| 0x34 | Optics  | 4        | 3           | 64 Hz   | 30         |
+| 0x35 | Optics  | 8        | 2           | 64 Hz   | 40         |
+| 0x36 | Optics  | 16       | 1           | 64 Hz   | 40         |
+
+### Data Encoding
+- **EEG**: 14-bit unsigned, LSB-first bit packing. Scale: 1450/16383 uV/bit
+- **Optics/PPG**: 20-bit unsigned, LSB-first bit packing
+- **IMU**: 16-bit signed, little-endian. Accel scale: 0.0000610352 g/bit, Gyro scale: -0.0074768 deg/s/bit
 
 ## Troubleshooting
 
