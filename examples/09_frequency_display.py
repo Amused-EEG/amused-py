@@ -26,7 +26,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 try:
     from bleak.backends.winrt.util import allow_sta
     allow_sta()
-except ImportError:
+except (ImportError, AttributeError, OSError):
     pass
 
 from muse_stream_client import MuseStreamClient
@@ -109,7 +109,7 @@ class FrequencyDisplay(pg.GraphicsLayoutWidget):
                 text="--",
                 anchor=(0.5, 0.5)
             )
-            freq_text.setFont(QtGui.QFont('Arial', 48, QtGui.QFont.Bold))
+            freq_text.setFont(QtGui.QFont('Arial', 48, QtGui.QFont.Weight.Bold))
             freq_box.addItem(freq_text)
             freq_text.setPos(0.5, 0.5)
             self.freq_displays[ch_name] = freq_text
@@ -120,7 +120,7 @@ class FrequencyDisplay(pg.GraphicsLayoutWidget):
             text="Waiting for data...",
             anchor=(0.5, 0.5)
         )
-        self.state_text.setFont(QtGui.QFont('Arial', 24, QtGui.QFont.Bold))
+        self.state_text.setFont(QtGui.QFont('Arial', 24, QtGui.QFont.Weight.Bold))
         self.state_box.addItem(self.state_text)
         self.state_text.setPos(0.5, 0.5)
         
@@ -324,12 +324,12 @@ if __name__ == '__main__':
     # Dark theme
     app.setStyle('Fusion')
     palette = QtGui.QPalette()
-    palette.setColor(QtGui.QPalette.Window, QtGui.QColor(30, 30, 30))
-    palette.setColor(QtGui.QPalette.WindowText, QtCore.Qt.white)
+    palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor(30, 30, 30))
+    palette.setColor(QtGui.QPalette.ColorRole.WindowText, QtGui.QColor(255, 255, 255))
     app.setPalette(palette)
     
     # Create and show
     main_window = FrequencyDisplay()
     main_window.show()
     
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

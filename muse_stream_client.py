@@ -16,26 +16,15 @@ import os
 
 from muse_raw_stream import MuseRawStream
 from muse_realtime_decoder import MuseRealtimeDecoder, DecodedData
+import muse_athena_protocol as proto
 
-# BLE UUIDs
-MUSE_SERVICE_UUID = "0000fe8d-0000-1000-8000-00805f9b34fb"
-CONTROL_CHAR_UUID = "273e0001-4c4d-454d-96be-f03bac821358"
-SENSOR_CHAR_UUIDS = [
-    "273e0013-4c4d-454d-96be-f03bac821358",  # Combined sensors
-    "273e0003-4c4d-454d-96be-f03bac821358",  # EEG TP9
-]
+# BLE UUIDs (from protocol module)
+MUSE_SERVICE_UUID = proto.MUSE_SERVICE_UUID
+CONTROL_CHAR_UUID = proto.CONTROL_UUID
+SENSOR_CHAR_UUID = proto.SENSOR_UUID
 
-# Commands
-COMMANDS = {
-    'v6': bytes.fromhex('0376360a'),           # Version
-    's': bytes.fromhex('02730a'),              # Status
-    'h': bytes.fromhex('02680a'),              # Halt
-    'p21': bytes.fromhex('047032310a'),        # Basic preset
-    'p1034': bytes.fromhex('0670313033340a'),  # Sleep preset
-    'p1035': bytes.fromhex('0670313033350a'),  # Sleep preset 2
-    'dc001': bytes.fromhex('0664633030310a'),  # Start streaming
-    'L1': bytes.fromhex('034c310a'),           # L1 command
-}
+# Commands (from protocol module)
+COMMANDS = proto.COMMANDS
 
 class MuseStreamClient:
     """
@@ -241,69 +230,43 @@ class MuseStreamClient:
                 
                 # Enable control notifications
                 await client.start_notify(CONTROL_CHAR_UUID, self.handle_control_notification)
-                
-                # Get device info
-                await client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['v6'], response=False)
-                await asyncio.sleep(0.1)
-                
-                await client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['s'], response=False)
-                await asyncio.sleep(0.1)
-                
-                # Halt any existing streams
-                await client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['h'], response=False)
-                await asyncio.sleep(0.1)
-                
-                # Set preset
-                self.log(f"Setting preset: {preset}")
-                await client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS[preset], response=False)
-                await asyncio.sleep(0.1)
-                
-                # Enable sensor notifications
-                sensor_enabled = False
-                for char_uuid in SENSOR_CHAR_UUIDS:
-                    try:
-                        await client.start_notify(char_uuid, self.handle_sensor_notification)
-                        sensor_enabled = True
-                        self.log(f"Sensor notifications enabled")
-                        break
-                    except:
-                        continue
-                
-                if not sensor_enabled:
-                    self.log("Failed to enable sensor notifications")
-                    return False
-                
+
+                # Execute the correct Athena init sequence
+                # p21 -> dc001+L1 -> halt -> target_preset -> dc001+L1
+                init_seq = proto.get_init_sequence(preset)
+                for description, cmd, delay in init_seq:
+                    self.log(f"Init: {description}")
+                    await client.write_gatt_char(CONTROL_CHAR_UUID, cmd, response=False)
+                    await asyncio.sleep(delay)
+
+                    # Enable sensor notifications after initial preset is set
+                    if description == "request status after preset":
+                        try:
+                            await client.start_notify(SENSOR_CHAR_UUID, self.handle_sensor_notification)
+                            self.log("Sensor notifications enabled")
+                        except Exception:
+                            self.log("Failed to enable sensor notifications")
+                            return False
+
                 # Re-register user callbacks with decoder
                 if self.decoder:
-                    # Re-register all callbacks to ensure they're connected
                     for callback_type in ['eeg', 'ppg', 'heart_rate', 'imu']:
                         if self.user_callbacks.get(callback_type):
-                            # Clear and re-add
                             self.decoder.callbacks[callback_type] = []
-                            
+
                     if self.user_callbacks['eeg']:
                         self.decoder.register_callback('eeg',
                             lambda data: self.user_callbacks['eeg']({'channels': data.eeg, 'timestamp': data.timestamp}))
                     if self.user_callbacks['ppg']:
                         self.decoder.register_callback('ppg',
-                            lambda data: self.user_callbacks['ppg']({'samples': data.ppg.get('samples', []) if data.ppg else [], 'timestamp': data.timestamp}))
+                            lambda data: self.user_callbacks['ppg']({'channels': data.ppg if data.ppg else {}, 'timestamp': data.timestamp}))
                     if self.user_callbacks['heart_rate']:
                         self.decoder.register_callback('heart_rate',
                             lambda data: self.user_callbacks['heart_rate'](data.heart_rate) if data.heart_rate else None)
                     if self.user_callbacks['imu']:
                         self.decoder.register_callback('imu',
                             lambda data: self.user_callbacks['imu']({'accel': data.imu.get('accel'), 'gyro': data.imu.get('gyro')}))
-                
-                # Start streaming (SEND TWICE!)
-                self.log("Starting stream...")
-                await client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['dc001'], response=False)
-                await asyncio.sleep(0.05)
-                await client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['dc001'], response=False)
-                await asyncio.sleep(0.1)
-                
-                # Send L1 command
-                await client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['L1'], response=False)
-                
+
                 # Wait for streaming to start
                 await asyncio.sleep(2)
                 

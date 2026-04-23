@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "amused"
-version = "1.0.2"
+version = "1.1.0"
 authors = [
     {name = "Adrian Tadeusz Belmans", email = "adrian.belmans@gmail.com"},
 ]
@@ -73,6 +73,7 @@ Issues = "https://github.com/nexon33/amused/issues"
 
 [tool.setuptools]
 py-modules = [
+    "muse_athena_protocol",
     "muse_data_parser",
     "muse_discovery",
     "muse_discovery_gui",
@@ -92,3 +93,7 @@ include-package-data = true
 
 [tool.setuptools.package-data]
 "*" = ["*.txt", "*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+collect_ignore = ["__init__.py"]

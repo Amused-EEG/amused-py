@@ -5,7 +5,7 @@ Open source BLE protocol implementation for Muse S EEG headsets
 No proprietary SDK required - just pure Python and BLE!
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __author__ = "nexon33 & Claude"
 
 # Core streaming client

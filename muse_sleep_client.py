@@ -21,34 +21,15 @@ import time
 import os
 import numpy as np
 from muse_ppg_heart_rate import PPGHeartRateExtractor, PPGData
+import muse_athena_protocol as proto
 
-# Service and Characteristic UUIDs
-MUSE_SERVICE_UUID = "0000fe8d-0000-1000-8000-00805f9b34fb"
-CONTROL_CHAR_UUID = "273e0001-4c4d-454d-96be-f03bac821358"
+# BLE UUIDs (from protocol module)
+MUSE_SERVICE_UUID = proto.MUSE_SERVICE_UUID
+CONTROL_CHAR_UUID = proto.CONTROL_UUID
+SENSOR_CHAR_UUID = proto.SENSOR_UUID
 
-# Try multiple sensor characteristics (different models may use different ones)
-SENSOR_CHAR_UUIDS = [
-    "273e0013-4c4d-454d-96be-f03bac821358",  # Combined EEG
-    "273e0003-4c4d-454d-96be-f03bac821358",  # EEG TP9
-]
-
-# PPG characteristics for heart rate monitoring
-PPG_CHAR_UUIDS = [
-    "273e000f-4c4d-454d-96be-f03bac821358",  # PPG1 (infrared)
-    "273e0010-4c4d-454d-96be-f03bac821358",  # PPG2 (near-infrared)  
-    "273e0011-4c4d-454d-96be-f03bac821358",  # PPG3 (red)
-]
-
-# Commands from new capture (sleep monitoring session)
-COMMANDS = {
-    'v6': bytes.fromhex('0376360a'),           # Version info
-    's': bytes.fromhex('02730a'),              # Status
-    'h': bytes.fromhex('02680a'),              # Halt/stop
-    'p1034': bytes.fromhex('0670313033340a'),  # Sleep preset 1
-    'p1035': bytes.fromhex('0670313033350a'),  # Sleep preset 2
-    'dc001': bytes.fromhex('0664633030310a'),  # Start streaming
-    'L1': bytes.fromhex('034c310a'),           # L1 command
-}
+# Commands (from protocol module)
+COMMANDS = proto.COMMANDS
 
 class MuseSleepClient:
     """Sleep monitoring client for Muse S - follows exact protocol from capture"""
@@ -162,25 +143,30 @@ class MuseSleepClient:
             # Flush periodically for safety
             if self.packet_count % 10 == 0:
                 self.csv_file.flush()
-    
-    def handle_ppg_notification(self, sender: int, data: bytearray):
-        """Handle PPG data for heart rate monitoring"""
+
+        # Extract PPG/HR from the multiplexed sensor stream
+        self._process_ppg_from_sensor(bytes(data))
+
+    def _process_ppg_from_sensor(self, data: bytes):
+        """Extract PPG/HR from multiplexed sensor data.
+
+        The Athena sends optics data as subpackets in the same BLE
+        notification as EEG and IMU. This method decodes them and
+        updates the heart rate buffer.
+        """
         try:
-            # Parse PPG packet
-            ppg_data = self.ppg_extractor.parse_ppg_packet(bytes(data))
-            
-            if ppg_data:
-                # Add samples to buffer (use IR channel for best results)
-                self.ppg_buffer.extend(ppg_data.ir_samples)
-                
+            parsed = proto.parse_payload(data)
+            for subpacket in parsed.get("OPTICS", []):
+                arr = subpacket["data"]  # (n_samples, n_channels)
+                # Use first channel (LO_NIR ~850nm) for heart rate
+                ir_samples = arr[:, 0].tolist()
+                self.ppg_buffer.extend(ir_samples)
+
                 # Extract heart rate every 5 seconds (320 samples at 64Hz)
                 if len(self.ppg_buffer) >= 320:
-                    # Convert to numpy array
-                    ppg_signal = np.array(self.ppg_buffer[-640:])  # Use last 10 seconds
-                    
-                    # Extract heart rate
+                    ppg_signal = np.array(self.ppg_buffer[-640:])
                     result = self.ppg_extractor.extract_heart_rate(ppg_signal)
-                    
+
                     if result.heart_rate_bpm > 0:
                         self.last_heart_rate = result.heart_rate_bpm
                         self.heart_rate_history.append({
@@ -189,14 +175,13 @@ class MuseSleepClient:
                             'confidence': result.confidence,
                             'quality': result.signal_quality
                         })
-                        
+
                         if self.verbose:
                             self.log(f"Heart Rate: {result.heart_rate_bpm:.0f} BPM ({result.signal_quality})", "DATA")
-                    
-                    # Keep buffer size manageable
+
                     if len(self.ppg_buffer) > 1280:  # 20 seconds max
                         self.ppg_buffer = self.ppg_buffer[-640:]
-                        
+
         except Exception as e:
             if self.verbose:
                 self.log(f"PPG processing error: {e}", "ERROR")
@@ -228,116 +213,56 @@ class MuseSleepClient:
         
         return device
     
-    async def execute_sleep_sequence(self):
+    async def execute_sleep_sequence(self, preset: str = "p1034"):
         """
-        Execute the EXACT sequence from the sleep monitoring capture.
-        Based on frames 24226-24349 from bluetooth_hci_new.pcap
+        Execute the correct Athena init sequence for sleep monitoring.
+
+        Uses the protocol module's init sequence:
+        p21 -> dc001+L1 -> halt -> target_preset -> dc001+L1
+
+        Args:
+            preset: Target preset. Default "p1034" for full sensors (EEG+IMU+Optics).
         """
-        
+
         self.log("Starting sleep monitoring sequence", "SLEEP")
-        
+
         try:
             # Step 1: Enable control notifications
-            self.log("Step 1: Enable control notifications", "SEND")
+            self.log("Enable control notifications", "SEND")
             await self.client.start_notify(CONTROL_CHAR_UUID, self.handle_control_notification)
             await asyncio.sleep(0.05)
-            
-            # Step 2: Get version (v6)
-            self.log("Step 2: Get device version", "SEND")
-            await self.client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['v6'], response=False)
-            await asyncio.sleep(0.1)
-            
-            # Step 3: Get status
-            self.log("Step 3: Get device status", "SEND")
-            await self.client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['s'], response=False)
-            await asyncio.sleep(0.1)
-            
-            # Step 4: Halt (ensure clean state)
-            self.log("Step 4: Halt any existing streams", "SEND")
-            await self.client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['h'], response=False)
-            await asyncio.sleep(0.08)
-            
-            # Step 5: Set preset p1034 (sleep mode 1)
-            self.log("Step 5: Set sleep preset p1034", "SEND")
-            await self.client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['p1034'], response=False)
-            await asyncio.sleep(0.08)
-            
-            # Step 6: Check status after preset
-            self.log("Step 6: Check status after preset", "SEND")
-            await self.client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['s'], response=False)
-            await asyncio.sleep(0.1)
-            
-            # Step 7: Enable sensor notifications
-            # Try multiple characteristics until one works
-            sensor_enabled = False
-            for char_uuid in SENSOR_CHAR_UUIDS:
-                try:
-                    self.log(f"Step 7: Trying sensor characteristic {char_uuid[-4:]}", "SEND")
-                    await self.client.start_notify(char_uuid, self.handle_sensor_notification)
-                    self.sensor_characteristic = char_uuid
-                    sensor_enabled = True
-                    break
-                except Exception as e:
-                    self.log(f"  Characteristic not available, trying next", "INFO")
-            
-            if not sensor_enabled:
-                self.log("Could not enable sensor notifications!", "ERROR")
-                return False
-            
-            await asyncio.sleep(0.1)
-            
-            # Step 7b: Check for PPG in the multiplexed data stream
-            # PPG data may be embedded in the main sensor stream rather than separate characteristics
-            self.log("Step 7b: PPG/fNIRS will be extracted from sensor stream", "INFO")
-            # The Muse S sleep preset (p1034/p1035) includes PPG data in the multiplexed stream
-            
-            await asyncio.sleep(0.1)
-            
-            # Step 8: First dc001 attempt
-            self.log("Step 8: Send dc001 (first attempt)", "SEND")
-            await self.client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['dc001'], response=False)
-            await asyncio.sleep(0.025)
-            
-            # Step 9: Send L1
-            self.log("Step 9: Send L1 command", "SEND")
-            await self.client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['L1'], response=False)
-            await asyncio.sleep(0.07)
-            
-            # Step 10: Halt again
-            self.log("Step 10: Send halt", "SEND")
-            await self.client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['h'], response=False)
-            await asyncio.sleep(0.06)
-            
-            # Step 11: Set preset p1035 (sleep mode 2)
-            self.log("Step 11: Set sleep preset p1035", "SEND")
-            await self.client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['p1035'], response=False)
-            await asyncio.sleep(0.09)
-            
-            # Step 12: Check status
-            self.log("Step 12: Check status", "SEND")
-            await self.client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['s'], response=False)
-            await asyncio.sleep(0.1)
-            
-            # Step 13: CRITICAL - Second dc001 (this starts streaming!)
-            self.log("Step 13: Send dc001 (SECOND attempt - starts streaming!)", "SEND")
-            await self.client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['dc001'], response=False)
-            await asyncio.sleep(0.025)
-            
-            # Step 14: Send L1 again
-            self.log("Step 14: Send L1 command again", "SEND")
-            await self.client.write_gatt_char(CONTROL_CHAR_UUID, COMMANDS['L1'], response=False)
-            
+
+            # Get the correct init sequence from the protocol module
+            init_seq = proto.get_init_sequence(preset)
+
+            for description, cmd, delay in init_seq:
+                self.log(f"Init: {description}", "SEND")
+                await self.client.write_gatt_char(CONTROL_CHAR_UUID, cmd, response=False)
+                await asyncio.sleep(delay)
+
+                # Enable sensor notifications after initial preset is set
+                if description == "request status after preset":
+                    try:
+                        self.log("Enabling sensor notifications", "SEND")
+                        await self.client.start_notify(SENSOR_CHAR_UUID, self.handle_sensor_notification)
+                        self.sensor_characteristic = SENSOR_CHAR_UUID
+                    except Exception as e:
+                        self.log(f"Could not enable sensor notifications: {e}", "ERROR")
+                        return False
+
+            self.log("PPG/fNIRS will be extracted from multiplexed sensor stream", "INFO")
+
             # Wait for streaming to start
             self.log("Waiting for sleep monitoring to begin...", "SLEEP")
             await asyncio.sleep(2)
-            
+
             if self.is_streaming:
-                self.log(f"Sleep monitoring active! Receiving data...", "SLEEP")
+                self.log("Sleep monitoring active! Receiving data...", "SLEEP")
                 return True
             else:
                 self.log("No data received - check device", "ERROR")
                 return False
-                
+
         except Exception as e:
             self.log(f"Error in sequence: {e}", "ERROR")
             self.errors += 1

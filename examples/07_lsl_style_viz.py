@@ -26,7 +26,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 try:
     from bleak.backends.winrt.util import allow_sta
     allow_sta()
-except ImportError:
+except (ImportError, AttributeError, OSError):
     pass
 
 from muse_stream_client import MuseStreamClient
@@ -47,13 +47,13 @@ class RealTimePlot(pg.GraphicsLayoutWidget):
     
     def __init__(self):
         super().__init__()
-        self.channel_count = 7  # Display all 7 EEG channels
+        self.channel_count = 4  # Athena 4-channel EEG
         self.sampling_rate = SAMPLING_RATE
         self.device_address = None
         self.stream_thread = None
-        
-        # Data buffers for all 7 channels
-        self.channel_names = ['TP9', 'AF7', 'AF8', 'TP10', 'FPz', 'AUX_R', 'AUX_L']
+
+        # Data buffers for EEG channels
+        self.channel_names = ['TP9', 'AF7', 'AF8', 'TP10']
         self.databuffers = {
             channel: deque(maxlen=BUFFER_SIZE)
             for channel in self.channel_names
@@ -80,7 +80,7 @@ class RealTimePlot(pg.GraphicsLayoutWidget):
     
     def _init_ui(self):
         """Initialize the user interface."""
-        self.setWindowTitle('Band Power Visualization - All 7 Channels')
+        self.setWindowTitle('Band Power Visualization - 4 Channels')
         self.resize(1400, 900)
         self.setBackground('#1e1e1e')
         
@@ -134,14 +134,14 @@ class RealTimePlot(pg.GraphicsLayoutWidget):
                     self.device_name = devices[0].name
                     print(f"Found device: {devices[0].name}")
                     # Queue status update for main thread
-                    self.data_queue.put(('status', f"Connected to {devices[0].name}", None))
+                    self.data_queue.put(('status', f"Connected to {devices[0].name}"))
                     self._start_streaming()
                 else:
                     print("No Muse device found!")
-                    self.data_queue.put(('status', "No device found - please connect Muse", None))
+                    self.data_queue.put(('status', "No device found - please connect Muse"))
             except Exception as e:
                 print(f"Error finding device: {e}")
-                self.data_queue.put(('status', f"Error: {e}", None))
+                self.data_queue.put(('status', f"Error: {e}"))
         
         # Run device discovery in thread
         threading.Thread(target=find_async, daemon=True).start()
@@ -176,7 +176,7 @@ class RealTimePlot(pg.GraphicsLayoutWidget):
             
             if not success:
                 print("Streaming failed!")
-                self.data_queue.put(('status', "Streaming failed", None))
+                self.data_queue.put(('status', "Streaming failed"))
         
         # Start streaming in background thread
         self.stream_thread = threading.Thread(
@@ -277,4 +277,4 @@ if __name__ == '__main__':
     main_window.start_updates()
     
     # Execute application
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
