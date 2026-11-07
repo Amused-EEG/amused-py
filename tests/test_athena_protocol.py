@@ -208,6 +208,50 @@ class TestPayloadParsing(unittest.TestCase):
         result = proto.parse_payload(bytes(header) + bytes(28))
         self.assertEqual(len(result["EEG"]), 0)
 
+    def test_skips_tag_0x53_mid_payload(self):
+        """Subpackets after a 0x53 subpacket are still parsed"""
+        packet = build_tag_packet(
+            proto.TAG_EEG_4CH, bytes(28),
+            extra_subpackets=[
+                (proto.TAG_UNDECODED_53, bytes(24)),
+                (proto.TAG_EEG_4CH, bytes(28)),
+                (proto.TAG_ACCGYRO, bytes(36)),
+            ]
+        )
+        result = proto.parse_payload(packet)
+        self.assertEqual(len(result["EEG"]), 2)
+        self.assertEqual(len(result["ACCGYRO"]), 1)
+
+    def test_skips_tag_0x53_as_first_subpacket(self):
+        """A packet whose first subpacket is 0x53 still yields what follows"""
+        packet = build_tag_packet(
+            proto.TAG_UNDECODED_53, bytes(24),
+            extra_subpackets=[(proto.TAG_EEG_4CH, bytes(28))]
+        )
+        result = proto.parse_payload(packet)
+        self.assertEqual(len(result["EEG"]), 1)
+
+
+class TestRealCapture(unittest.TestCase):
+    """Decode the captured Athena session in tests/test_data"""
+
+    CAPTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "test_data", "muse_20250824_172756.bin")
+
+    def test_eeg_rate_matches_256hz(self):
+        """All EEG subpackets are recovered: effective rate ~256 Hz, not ~215 Hz"""
+        from muse_raw_stream import MuseRawStream
+        packets = list(MuseRawStream(self.CAPTURE).read_packets())
+        n_samples = sum(
+            sp["data"].shape[0]
+            for p in packets
+            for sp in proto.parse_payload(p.data)["EEG"]
+        )
+        duration = (packets[-1].timestamp - packets[0].timestamp).total_seconds()
+        rate = n_samples / duration
+        self.assertGreater(rate, 250.0)
+        self.assertLess(rate, 262.0)
+
 
 class TestCommandEncoding(unittest.TestCase):
     """Test command encoding"""
