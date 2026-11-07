@@ -60,6 +60,26 @@ SENSOR_CONFIG = {
     TAG_BATTERY_2:   ("BATTERY", 1,  1, 20,  1.0),
 }
 
+# TAGs whose contents are not decoded yet but whose data length is known.
+# parse_payload must step over them; stopping at an unknown TAG discards every
+# subpacket after it in the same notification.
+#   0x53: 24 data bytes. Observed mid-payload in roughly half of all
+#         notifications under preset p1034; inferred from captured packets
+#         (every packet in tests/test_data parses to exactly its end with this
+#         length, and EEG throughput rises from ~215 Hz to the nominal 256 Hz).
+TAG_UNDECODED_53 = 0x53
+SKIP_TAGS = {
+    TAG_UNDECODED_53: 24,
+}
+
+
+def subpacket_data_len(tag: int) -> Optional[int]:
+    """Data length in bytes for a TAG, or None if the TAG is unknown."""
+    config = SENSOR_CONFIG.get(tag)
+    if config is not None:
+        return config[3]
+    return SKIP_TAGS.get(tag)
+
 # ---------------------------------------------------------------------------
 # Scaling factors
 # ---------------------------------------------------------------------------
@@ -330,9 +350,8 @@ def parse_payload(payload: bytes) -> Dict[str, list]:
 
     # First subpacket: TAG is at header byte 9, data starts at offset 14
     first_tag = payload[9]
-    config = SENSOR_CONFIG.get(first_tag)
-    if config is not None:
-        data_len = config[3]  # data_len field
+    data_len = subpacket_data_len(first_tag)
+    if data_len is not None:
         data_end = HEADER_SIZE + data_len
         if data_end <= len(payload):
             data_bytes = payload[HEADER_SIZE:data_end]
@@ -349,11 +368,10 @@ def parse_payload(payload: bytes) -> Dict[str, list]:
     # Subsequent subpackets: [TAG(1)] [header(4)] [data(N)]
     while offset + 5 < len(payload):
         tag = payload[offset]
-        cfg = SENSOR_CONFIG.get(tag)
-        if cfg is None:
+        data_len = subpacket_data_len(tag)
+        if data_len is None:
             break  # Unknown TAG, stop parsing
 
-        data_len = cfg[3]
         data_start = offset + 5  # 1 byte TAG + 4 bytes header
         data_end = data_start + data_len
 
